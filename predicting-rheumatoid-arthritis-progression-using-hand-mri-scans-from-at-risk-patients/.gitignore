@@ -102,3 +102,6 @@ bin/
 
 # exclude external models from source control
 /src/external/
+
+# Virtual Environment
+venv/
