@@ -479,3 +479,5 @@ for images, labels in train_loader:
     print(f"Batch label shape: {labels.shape}")
     break  # Remove this break to see all batches, or keep to see just the first batch
 
+
+# %%
