@@ -105,3 +105,6 @@ bin/
 
 # Virtual Environment
 venv/
+
+# Cloned Disruptive Autoencoder 
+predicting-rheumatoid-arthritis-progression-using-hand-mri-scans-from-at-risk-patients/research-contributions/
