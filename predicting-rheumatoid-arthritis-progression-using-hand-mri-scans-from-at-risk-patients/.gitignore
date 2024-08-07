@@ -108,4 +108,5 @@ venv/
 
 # Cloned Disruptive Autoencoder
 predicting-rheumatoid-arthritis-progression-using-hand-mri-scans-from-at-risk-patients/research-contributions/
-
+/apex/
+/models/research_contributions/
