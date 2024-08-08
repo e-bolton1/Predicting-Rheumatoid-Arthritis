@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[21]:
+# In[2]:
 
 
 # Standard library imports
@@ -34,7 +34,7 @@ from sklearn.model_selection import train_test_split  # For splitting datasets i
 from collections import defaultdict
 
 
-# In[2]:
+# In[3]:
 
 
 os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBSET/')
@@ -238,7 +238,7 @@ def get_best_patient_images(base_path):
 
 # #### Read CSV file and set up paths
 
-# In[147]:
+# In[4]:
 
 
 # Reading the CSV file
@@ -319,7 +319,7 @@ class HandScanDataset(Dataset):
 # Pixels with intensity values above this threshold are considered part of the foreground, while those below are treated as background.
 # 
 
-# In[181]:
+# In[5]:
 
 
 class CustomThresholding(tio.Transform):
@@ -339,7 +339,7 @@ class CustomThresholding(tio.Transform):
 # #### Morphological Operations
 # improves the mask of the hand to identfiy the ROI
 
-# In[182]:
+# In[6]:
 
 
 class MorphologicalOperations(tio.Transform):
@@ -368,12 +368,12 @@ class MorphologicalOperations(tio.Transform):
         return subject
 
 
-# In[192]:
+# In[12]:
 
 
 transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((384, 512, 20)),    # Crop or pad to 20 slices and 256x256 pixels
+    tio.CropOrPad((96, 96, 96)),    # Crop or pad to 20 slices and 256x256 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomAffine(),               # Random affine transformations
@@ -384,74 +384,220 @@ transform = tio.Compose([
 ])
 
 
-# In[ ]:
-
-
-# Get the set of already copied files
-copied_files = get_copied_files(log_file)
-print(f"Already copied files: {copied_files}")
-
-# Walk through the source directory
-for root, dirs, files in os.walk(src_dir):
-    if sequence_name in dirs:
-        project_path = os.path.join(root, sequence_name)
-        
-        # Get the images in the specified sequence
-        dicom_files = []
-        for image_path in glob.glob(os.path.join(project_path, '*')):
-            if image_path in copied_files:
-                print(f"Skipping already copied file: {image_path}")
-                continue
-
-            # Ensure the file exists before trying to read it
-            if not os.path.exists(image_path):
-                print(f"File not found: {image_path}")
-                continue
-
-            try:
-                dicom_file = dcmread(image_path)
-                # Check Study Description
-                if dicom_file.StudyDescription in ['MRI Hand Rt', 'MRI Hand with contrast Rt']:
-                    dicom_files.append((dicom_file, image_path))
-            except Exception as e:
-                print(f"Error reading {image_path}: {e}")
-
-        for dicom_file, image_path in dicom_files:
-            relative_dir = os.path.relpath(project_path, src_dir)
-            dest_path = os.path.join(dest_dir, relative_dir, os.path.basename(image_path))
-            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-            print(f"Copying from {image_path} to {dest_path}")
-
-            try:
-                # Validate the source path again
-                if not os.path.exists(image_path):
-                    print(f"Source file not found at the time of copying: {image_path}")
-                    continue
-
-                shutil.copy(image_path, dest_path)
-                log_copied_file(log_file, image_path)  # Log the copied file
-                print(f"Copied file: {image_path} to {dest_path}")
-            except Exception as e:
-                print(f"Copy failed: {e}")
-
-
-# In[193]:
+# In[13]:
 
 
 validation_transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((20, 256, 256))   # Crop or pad images to the desired shape
+    tio.CropOrPad((96, 96, 96))   # Crop or pad images to the desired shape
 ])
+
+
+# In[14]:
+
+
+class HandScanDataset2(Dataset):
+    def __init__(self, labels_df, data_dir, transform=None):
+        """
+        Args:
+            labels_df (DataFrame): DataFrame containing the patient IDs and labels
+            data_dir (str): Path to the data folder
+            transform (callable, optional): Optional transform to be applied on a sample.
+        """
+        self.labels_df = labels_df
+        self.data_dir = data_dir
+        self.transform = transform
+
+        # Create a list of patient IDs and their corresponding labels
+        self.patient_ids = self.labels_df['patient ID'].astype(str).str.zfill(5).tolist()
+        self.labels = self.labels_df['progression'].apply(lambda x: 1 if x == 'y' else 0).tolist()
+
+        # Create a dictionary of the labels
+        self.dict_labels = dict(zip(self.patient_ids, self.labels))
+        print(self.dict_labels)
+
+    def __len__(self):
+        return len(self.patient_ids)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        patient_id = self.patient_ids[idx]
+        label = self.labels[idx]
+
+        # Process the images for this patient
+        patient_dir = os.path.join(self.data_dir, patient_id)
+        images = self.get_best_patient_images(patient_dir)  # Call the internal method
+        
+        # If no images were returned, handle this case (optional)
+        if len(images) == 0:
+            raise ValueError(f"No images found for patient {patient_id}")
+
+        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
+
+        images_tensor = torch.tensor(images, dtype=torch.float32)
+        images_tensor_channel = torch.unsqueeze(images_tensor, 0)
+        label_tensor = torch.tensor(label, dtype=torch.long)
+
+        if self.transform:
+            images_tensor_channel = self.transform(images_tensor_channel)
+
+        return images_tensor_channel, label_tensor
+
+    def get_best_patient_images(self, base_path):
+        """ 
+        Process all images in the 't1_vibe_we' subfolder of each subject.
+        Sort images by Instance Number and return a sequence of a fixed length.
+        """
+        seq_len = 96
+        all_images = []
+
+        for root, dirs, files in os.walk(base_path):
+            if 't1_vibe_we' in dirs:
+                t1_vibe_we_path = os.path.join(root, 't1_vibe_we')
+                
+                # Get the images in the 't1_vibe_we' sequence
+                dicom_files = []
+                for image_path in glob.glob(os.path.join(t1_vibe_we_path, '*')):
+                    try:
+                        dicom_file = pydicom.dcmread(image_path)
+                        dicom_files.append((dicom_file, image_path))
+                    except Exception as e:
+                        print(f"Error reading {image_path}: {e}")
+
+                # Sort the files by Instance Number
+                dicom_files.sort(key=lambda x: x[0].InstanceNumber)
+                
+                # Remove duplicates
+                dicom_files = self.remove_duplicates(dicom_files)
+
+                # Find the best slice
+                best_slice = self.find_best_slice(dicom_files)
+                if best_slice:
+                    best_dicom_file, best_image_path = best_slice
+                    best_instance_number = best_dicom_file.InstanceNumber
+                    print(f"Best instance number: {best_instance_number}")
+
+                    # Calculate the start and end indices for the selected sequence
+                    start_index = max(0, best_instance_number - (seq_len // 2))
+                    end_index = start_index + seq_len
+
+                    # Select the slices around the best slice
+                    selected_slices = dicom_files[start_index:end_index]
+
+                    images = []
+                    for dicom_file, image_path in selected_slices:
+                        try:
+                            image = self.process_dicom_image(image_path)
+                            images.append(image)
+                        except Exception as e:
+                            print(f"Error processing image {image_path}: {e}")
+
+                    # Determine the original image dimensions
+                    if images:
+                        img_shape = images[0].shape
+
+                    if len(images) < seq_len:
+                        # Pad with zero images of the same shape as the original images
+                        diff = seq_len - len(images)
+                        images.extend([np.zeros(img_shape, dtype=np.uint8) for _ in range(diff)])
+
+                    all_images.extend(images)
+        return np.array(all_images)
+
+    def remove_duplicates(self, dicom_files):
+        """ Remove duplicate instance numbers, keeping only the slice with the highest sum of intensities. """
+        instance_dict = defaultdict(list)
+
+        for dicom_file, image_path in dicom_files:
+            instance_number = dicom_file.InstanceNumber
+            instance_dict[instance_number].append((dicom_file, image_path))
+
+        # Keep only the slice with the highest sum of intensities for each instance number
+        unique_dicom_files = []
+        for instance_number, files in instance_dict.items():
+            if len(files) > 1:
+                best_slice = self.find_best_slice(files)
+                unique_dicom_files.append(best_slice)
+            else:
+                unique_dicom_files.append(files[0])
+
+        return unique_dicom_files
+
+    def find_best_slice(self, dicom_files):
+        """ Find the slice with the highest sum of pixel intensities. """
+        max_sum = -1
+        best_slice = None
+
+        for dicom_file, image_path in dicom_files:
+            try:
+                image = dicom_file.pixel_array
+                image_sum = np.sum(image)
+                if image_sum > max_sum:
+                    max_sum = image_sum
+                    best_slice = (dicom_file, image_path)
+            except Exception as e:
+                print(f"Error reading {image_path}: {e}")
+
+        return best_slice
+
+    def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
+        """ Given a path to a DICOM image, process and return the image. 
+            Reduces the size in memory.
+        """
+        dicom_file = pydicom.dcmread(path)
+        image = dicom_file.pixel_array
+        image = image - np.min(image)
+        image = image.astype(np.uint8)
+        
+        # Resize the image to 512x384 using PIL
+        if resize:
+            image = Image.fromarray(image)
+            image = image.resize((512, 384))
+            image = np.array(image)
+        
+        return image
+
+    def get_sequence_images(self, path: str) -> list:
+        images = []
+        
+        # Get a list of all DICOM files in the directory
+        image_path_list = glob.glob(os.path.join(path, '*'))
+        
+        # Read the DICOM files and store them with their instance numbers
+        dicom_files = []
+        for image_path in image_path_list:
+            try:
+                dicom_file = pydicom.dcmread(image_path)
+                instance_number = dicom_file.InstanceNumber
+                dicom_files.append((instance_number, image_path))
+            except Exception as e:
+                print(f"Error reading {image_path}: {e}")
+        
+        # Sort the files by instance number
+        dicom_files.sort(key=lambda x: x[0])
+        
+        # Read the pixel data in sorted order
+        for _, image_path in dicom_files:
+            try:
+                dicom_file = pydicom.dcmread(image_path)
+                image = dicom_file.pixel_array
+                images.append(image)
+            except Exception as e:
+                print(f"Error reading pixel data from {image_path}: {e}")
+        
+        return images
 
 
 # #### Dataloader
 
-# In[194]:
+# In[15]:
 
 
 # Creating datasets
-train_dataset = HandScanDataset(labels_df=train_df, data_dir=training_data_dir, transform=transform)
-valid_dataset = HandScanDataset(labels_df=valid_df, data_dir=training_data_dir, transform=validation_transform)
+train_dataset = HandScanDataset2(labels_df=train_df, data_dir=training_data_dir, transform=transform)
+valid_dataset = HandScanDataset2(labels_df=valid_df, data_dir=training_data_dir, transform=validation_transform)
 
 # Creating data loaders
 batch_size = 4
@@ -459,7 +605,7 @@ train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
 
-# In[195]:
+# In[16]:
 
 
 # Check a few samples directly from the dataset
@@ -470,7 +616,7 @@ for i in range(len(train_dataset)):
         break
 
 
-# In[196]:
+# In[17]:
 
 
 # Iterate through the train_loader and print the shape of the batches
@@ -480,4 +626,8 @@ for images, labels in train_loader:
     break  # Remove this break to see all batches, or keep to see just the first batch
 
 
-# %%
+# In[ ]:
+
+
+
+
