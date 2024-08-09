@@ -414,7 +414,7 @@ class HandScanDataset2(Dataset):
 
         # Create a dictionary of the labels
         self.dict_labels = dict(zip(self.patient_ids, self.labels))
-        print(self.dict_labels)
+        
 
     def __len__(self):
         return len(self.patient_ids)
@@ -434,7 +434,7 @@ class HandScanDataset2(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
+        
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -450,7 +450,7 @@ class HandScanDataset2(Dataset):
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 96
+        seq_len = 2
         all_images = []
 
         for root, dirs, files in os.walk(base_path):
@@ -477,7 +477,7 @@ class HandScanDataset2(Dataset):
                 if best_slice:
                     best_dicom_file, best_image_path = best_slice
                     best_instance_number = best_dicom_file.InstanceNumber
-                    print(f"Best instance number: {best_instance_number}")
+                    
 
                     # Calculate the start and end indices for the selected sequence
                     start_index = max(0, best_instance_number - (seq_len // 2))
