@@ -373,7 +373,7 @@ class MorphologicalOperations(tio.Transform):
 
 transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((96, 96, 96)),    # Crop or pad to 20 slices and 256x256 pixels
+    tio.CropOrPad((2, 98, 98)),    # Crop or pad to 20 slices and 256x256 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomAffine(),               # Random affine transformations
