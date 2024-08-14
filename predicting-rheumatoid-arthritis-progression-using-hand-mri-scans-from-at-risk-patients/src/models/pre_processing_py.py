@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!venv/bin/python3.12
 # coding: utf-8
 
 # In[2]:
@@ -627,6 +627,7 @@ for images, labels in train_loader:
 
 
 # In[ ]:
+
 
 
 
