@@ -38,7 +38,7 @@ from collections import defaultdict
 
 
 os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBSET/')
-print(os.getcwd())
+# print(os.getcwd())
 
 
 # #### Process the DICOM Image
@@ -87,7 +87,7 @@ def get_sequence_images(path: str) -> list:
             instance_number = dicom_file.InstanceNumber
             dicom_files.append((instance_number, image_path))
         except Exception as e:
-            print(f"Error reading {image_path}: {e}")
+            # print(f"Error reading {image_path}: {e}")
     
     # Sort the files by instance number
     dicom_files.sort(key=lambda x: x[0])
@@ -99,7 +99,7 @@ def get_sequence_images(path: str) -> list:
             image = dicom_file.pixel_array
             images.append(image)
         except Exception as e:
-            print(f"Error reading pixel data from {image_path}: {e}")
+            # print(f"Error reading pixel data from {image_path}: {e}")
     
     return images
 
@@ -127,7 +127,7 @@ def find_best_slice(dicom_files):
                 max_sum = image_sum
                 best_slice = (dicom_file, image_path)
         except Exception as e:
-            print(f"Error reading {image_path}: {e}")
+            # print(f"Error reading {image_path}: {e}")
 
     return best_slice
 
@@ -189,7 +189,7 @@ def get_best_patient_images(base_path):
                     dicom_file = pydicom.dcmread(image_path)
                     dicom_files.append((dicom_file, image_path))
                 except Exception as e:
-                    print(f"Error reading {image_path}: {e}")
+                    # print(f"Error reading {image_path}: {e}")
 
             # Sort the files by Instance Number
             dicom_files.sort(key=lambda x: x[0].InstanceNumber)
@@ -202,7 +202,7 @@ def get_best_patient_images(base_path):
             if best_slice:
                 best_dicom_file, best_image_path = best_slice
                 best_instance_number = best_dicom_file.InstanceNumber
-                print(f"Best instance number: {best_instance_number}")
+                # print(f"Best instance number: {best_instance_number}")
 
                 # Calculate the start and end indices for the selected sequence
                 start_index = max(0, best_instance_number - (seq_len // 2))
@@ -219,7 +219,7 @@ def get_best_patient_images(base_path):
                         # image = np.expand_dims(image, axis=0)
                         images.append(image)
                     except Exception as e:
-                        print(f"Error processing image {image_path}: {e}")
+                        # print(f"Error processing image {image_path}: {e}")
 
                 # Determine the original image dimensions
                 if images:
@@ -231,7 +231,7 @@ def get_best_patient_images(base_path):
                     images.extend([np.zeros(img_shape, dtype=np.uint8) for _ in range(diff)])
 
                 all_images.extend(images)
-                print(np.array(all_images).shape)
+                # print(np.array(all_images).shape)
     return np.array(all_images)
 
 
@@ -277,7 +277,7 @@ class HandScanDataset(Dataset):
 
         # Create a dictionary of the labels
         self.dict_labels = dict(zip(self.patient_ids, self.labels))
-        print(self.dict_labels)
+        # print(self.dict_labels)
 
 
     def __len__(self):
@@ -298,7 +298,7 @@ class HandScanDataset(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
+        # print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
 
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
@@ -377,7 +377,11 @@ transform = tio.Compose([
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomAffine(),               # Random affine transformations
-    tio.RandomElasticDeformation(),   # Random elastic deformations
+    tio.RandomElasticDeformation(
+        num_control_points=4,         # Adjusted for subtle deformations
+        max_displacement=(2, 2, 2),   # Small displacement to preserve anatomy
+        locked_borders=True           # Prevents distortion at image edges
+    ),
     tio.RandomFlip(axes=(0,)),        # Randomly flip along the depth axis
     tio.RandomNoise(),                # Add random Gaussian noise 
     tio.RandomBlur(),                 # Apply random blur
@@ -464,7 +468,7 @@ class HandScanDataset2(Dataset):
                         dicom_file = pydicom.dcmread(image_path)
                         dicom_files.append((dicom_file, image_path))
                     except Exception as e:
-                        print(f"Error reading {image_path}: {e}")
+                        # print(f"Error reading {image_path}: {e}")
 
                 # Sort the files by Instance Number
                 dicom_files.sort(key=lambda x: x[0].InstanceNumber)
@@ -492,7 +496,7 @@ class HandScanDataset2(Dataset):
                             image = self.process_dicom_image(image_path)
                             images.append(image)
                         except Exception as e:
-                            print(f"Error processing image {image_path}: {e}")
+                            # print(f"Error processing image {image_path}: {e}")
 
                     # Determine the original image dimensions
                     if images:
@@ -538,7 +542,7 @@ class HandScanDataset2(Dataset):
                     max_sum = image_sum
                     best_slice = (dicom_file, image_path)
             except Exception as e:
-                print(f"Error reading {image_path}: {e}")
+                # print(f"Error reading {image_path}: {e}")
 
         return best_slice
 
@@ -573,7 +577,7 @@ class HandScanDataset2(Dataset):
                 instance_number = dicom_file.InstanceNumber
                 dicom_files.append((instance_number, image_path))
             except Exception as e:
-                print(f"Error reading {image_path}: {e}")
+                # print(f"Error reading {image_path}: {e}")
         
         # Sort the files by instance number
         dicom_files.sort(key=lambda x: x[0])
@@ -585,7 +589,7 @@ class HandScanDataset2(Dataset):
                 image = dicom_file.pixel_array
                 images.append(image)
             except Exception as e:
-                print(f"Error reading pixel data from {image_path}: {e}")
+                # print(f"Error reading pixel data from {image_path}: {e}")
         
         return images
 
@@ -611,7 +615,7 @@ valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 # Check a few samples directly from the dataset
 for i in range(len(train_dataset)):
     images, labels = train_dataset[i]
-    print(f"Sample {i}: Image shape: {images.shape}, Label: {labels}")
+    # print(f"Sample {i}: Image shape: {images.shape}, Label: {labels}")
     if i == 2:  # Check only the first 3 samples
         break
 
@@ -619,10 +623,10 @@ for i in range(len(train_dataset)):
 # In[17]:
 
 
-# Iterate through the train_loader and print the shape of the batches
+# Iterate through the train_loader and # print the shape of the batches
 for images, labels in train_loader:
-    print(f"Batch image shape: {images.shape}")
-    print(f"Batch label shape: {labels.shape}")
+    # print(f"Batch image shape: {images.shape}")
+    # print(f"Batch label shape: {labels.shape}")
     break  # Remove this break to see all batches, or keep to see just the first batch
 
 
