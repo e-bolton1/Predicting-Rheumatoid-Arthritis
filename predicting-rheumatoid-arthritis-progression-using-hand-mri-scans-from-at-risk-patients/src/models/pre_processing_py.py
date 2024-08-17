@@ -87,7 +87,7 @@ def get_sequence_images(path: str) -> list:
             instance_number = dicom_file.InstanceNumber
             dicom_files.append((instance_number, image_path))
         except Exception as e:
-            # print(f"Error reading {image_path}: {e}")
+            print(f"Error reading {image_path}: {e}")
     
     # Sort the files by instance number
     dicom_files.sort(key=lambda x: x[0])
