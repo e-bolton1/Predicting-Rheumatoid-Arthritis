@@ -47,6 +47,20 @@ os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBS
 
 # In[78]:
 
+import torchio as tio
+import matplotlib.pyplot as plt
+
+# Function to display images
+def display_images(images, title):
+    plt.figure(figsize=(12, 6))
+    for i in range(images.shape[0]):
+        plt.subplot(1, images.shape[0], i + 1)
+        plt.imshow(images[i, 0, images.shape[2] // 2].cpu(), cmap="gray")
+        plt.title(f"{title} Image {i+1}")
+        plt.axis("off")
+    plt.show()
+
+
 
 def process_dicom_image(path: str, resize=True) -> np.ndarray:
     """ Given a path to a DICOM image, process and return the image. 
@@ -99,7 +113,7 @@ def get_sequence_images(path: str) -> list:
             image = dicom_file.pixel_array
             images.append(image)
         except Exception as e:
-            # print(f"Error reading pixel data from {image_path}: {e}")
+            print(f"Error reading pixel data from {image_path}: {e}")
     
     return images
 
@@ -127,7 +141,7 @@ def find_best_slice(dicom_files):
                 max_sum = image_sum
                 best_slice = (dicom_file, image_path)
         except Exception as e:
-            # print(f"Error reading {image_path}: {e}")
+            print(f"Error reading {image_path}: {e}")
 
     return best_slice
 
@@ -189,7 +203,7 @@ def get_best_patient_images(base_path):
                     dicom_file = pydicom.dcmread(image_path)
                     dicom_files.append((dicom_file, image_path))
                 except Exception as e:
-                    # print(f"Error reading {image_path}: {e}")
+                    print(f"Error reading {image_path}: {e}")
 
             # Sort the files by Instance Number
             dicom_files.sort(key=lambda x: x[0].InstanceNumber)
@@ -219,7 +233,7 @@ def get_best_patient_images(base_path):
                         # image = np.expand_dims(image, axis=0)
                         images.append(image)
                     except Exception as e:
-                        # print(f"Error processing image {image_path}: {e}")
+                        print(f"Error processing image {image_path}: {e}")
 
                 # Determine the original image dimensions
                 if images:
@@ -469,7 +483,7 @@ class HandScanDataset2(Dataset):
                         dicom_file = pydicom.dcmread(image_path)
                         dicom_files.append((dicom_file, image_path))
                     except Exception as e:
-                        # print(f"Error reading {image_path}: {e}")
+                        print(f"Error reading {image_path}: {e}")
 
                 # Sort the files by Instance Number
                 dicom_files.sort(key=lambda x: x[0].InstanceNumber)
@@ -497,7 +511,7 @@ class HandScanDataset2(Dataset):
                             image = self.process_dicom_image(image_path)
                             images.append(image)
                         except Exception as e:
-                            # print(f"Error processing image {image_path}: {e}")
+                            print(f"Error processing image {image_path}: {e}")
 
                     # Determine the original image dimensions
                     if images:
@@ -543,7 +557,7 @@ class HandScanDataset2(Dataset):
                     max_sum = image_sum
                     best_slice = (dicom_file, image_path)
             except Exception as e:
-                # print(f"Error reading {image_path}: {e}")
+                print(f"Error reading {image_path}: {e}")
 
         return best_slice
 
@@ -578,7 +592,7 @@ class HandScanDataset2(Dataset):
                 instance_number = dicom_file.InstanceNumber
                 dicom_files.append((instance_number, image_path))
             except Exception as e:
-                # print(f"Error reading {image_path}: {e}")
+                print(f"Error reading {image_path}: {e}")
         
         # Sort the files by instance number
         dicom_files.sort(key=lambda x: x[0])
@@ -590,7 +604,7 @@ class HandScanDataset2(Dataset):
                 image = dicom_file.pixel_array
                 images.append(image)
             except Exception as e:
-                # print(f"Error reading pixel data from {image_path}: {e}")
+                print(f"Error reading pixel data from {image_path}: {e}")
         
         return images
 
