@@ -390,15 +390,19 @@ transform = tio.Compose([
     tio.CropOrPad((2, 98, 98)),       # Crop or pad to 2 slices and 98x98 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
-    tio.RandomAffine(),               # Random affine transformations
+    tio.RandomAffine(
+        scales=(0.9, 1.1),  # Limit scaling to a range near 1.0
+        degrees=(0, 10),  # Small rotations up to 10 degrees
+        translation=(5, 5, 5)  # Small translations
+    )
     tio.RandomElasticDeformation(
         num_control_points=8,         # Adjusted for subtle deformations
         max_displacement=(1, 1, 1),   # Small displacement to preserve anatomy
         locked_borders=True           # Prevents distortion at image edges
     ),
-    tio.RandomFlip(axes=(0,)),        # Randomly flip along the depth axis
-    tio.RandomNoise(),                # Add random Gaussian noise 
-    tio.RandomBlur(),                 # Apply random blur
+    tio.RandomFlip(axes=(2,)),        # Randomly flip along the depth axis
+    tio.RandomNoise(std=(0, 0.02)),  # Reduce noise level
+    tio.RandomBlur(std=(0.5, 1.0))  # Reduce blur strength
 ])
 
 
