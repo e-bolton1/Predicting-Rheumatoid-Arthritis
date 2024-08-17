@@ -392,8 +392,8 @@ transform = tio.Compose([
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomAffine(),               # Random affine transformations
     tio.RandomElasticDeformation(
-        num_control_points=4,         # Adjusted for subtle deformations
-        max_displacement=(2, 2, 2),   # Small displacement to preserve anatomy
+        num_control_points=8,         # Adjusted for subtle deformations
+        max_displacement=(1, 1, 1),   # Small displacement to preserve anatomy
         locked_borders=True           # Prevents distortion at image edges
     ),
     tio.RandomFlip(axes=(0,)),        # Randomly flip along the depth axis
