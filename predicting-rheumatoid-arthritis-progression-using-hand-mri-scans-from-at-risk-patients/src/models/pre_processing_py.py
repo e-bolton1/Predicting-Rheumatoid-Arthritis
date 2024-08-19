@@ -38,7 +38,7 @@ from collections import defaultdict
 
 
 os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBSET/')
-# print(os.getcwd())
+print(os.getcwd())
 
 
 # #### Process the DICOM Image
@@ -74,7 +74,7 @@ def process_dicom_image(path: str, resize=True) -> np.ndarray:
     # resize the image to 256x256 using PIL
     if resize:
         image = Image.fromarray(image)
-        image = image.resize((512, 384))
+        image = image.resize((384, 512))
         image = np.array(image)
     
     return image
@@ -216,7 +216,7 @@ def get_best_patient_images(base_path):
             if best_slice:
                 best_dicom_file, best_image_path = best_slice
                 best_instance_number = best_dicom_file.InstanceNumber
-                # print(f"Best instance number: {best_instance_number}")
+                print(f"Best instance number: {best_instance_number}")
 
                 # Calculate the start and end indices for the selected sequence
                 start_index = max(0, best_instance_number - (seq_len // 2))
@@ -245,7 +245,7 @@ def get_best_patient_images(base_path):
                     images.extend([np.zeros(img_shape, dtype=np.uint8) for _ in range(diff)])
 
                 all_images.extend(images)
-                # print(np.array(all_images).shape)
+                print(np.array(all_images).shape)
     return np.array(all_images)
 
 
@@ -291,7 +291,7 @@ class HandScanDataset(Dataset):
 
         # Create a dictionary of the labels
         self.dict_labels = dict(zip(self.patient_ids, self.labels))
-        # print(self.dict_labels)
+        print(self.dict_labels)
 
 
     def __len__(self):
@@ -312,7 +312,7 @@ class HandScanDataset(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        # print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
+        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
 
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
@@ -387,22 +387,17 @@ class MorphologicalOperations(tio.Transform):
 
 transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((2, 98, 98)),       # Crop or pad to 2 slices and 98x98 pixels
+    tio.CropOrPad((20, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
-    tio.RandomAffine(
-        scales=(0.9, 1.1),  # Limit scaling to a range near 1.0
-        degrees=(0, 10),  # Small rotations up to 10 degrees
-        translation=(5, 5, 5)  # Small translations
-    )
     tio.RandomElasticDeformation(
-        num_control_points=8,         # Adjusted for subtle deformations
-        max_displacement=(1, 1, 1),   # Small displacement to preserve anatomy
-        locked_borders=True           # Prevents distortion at image edges
+        num_control_points=8,
+        max_displacement=(1, 1, 1),
+        locked_borders=True
     ),
-    tio.RandomFlip(axes=(2,)),        # Randomly flip along the depth axis
-    tio.RandomNoise(std=(0, 0.02)),  # Reduce noise level
-    tio.RandomBlur(std=(0.5, 1.0))  # Reduce blur strength
+    tio.RandomFlip(axes=(2,)),        # Randomly flip along the vertical axis only
+    tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
+    tio.RandomBlur(std=(0.5, 1.0))    # Apply subtle blur
 ])
 
 
@@ -412,7 +407,7 @@ transform = tio.Compose([
 
 validation_transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((96, 96, 96))   # Crop or pad images to the desired shape
+    tio.CropOrPad((20, 512, 512))   # Crop or pad images to the desired shape
 ])
 
 
@@ -634,7 +629,7 @@ valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 # Check a few samples directly from the dataset
 for i in range(len(train_dataset)):
     images, labels = train_dataset[i]
-    # print(f"Sample {i}: Image shape: {images.shape}, Label: {labels}")
+    print(f"Sample {i}: Image shape: {images.shape}, Label: {labels}")
     if i == 2:  # Check only the first 3 samples
         break
 
@@ -642,10 +637,10 @@ for i in range(len(train_dataset)):
 # In[17]:
 
 
-# Iterate through the train_loader and # print the shape of the batches
+# Iterate through the train_loader and print the shape of the batches
 for images, labels in train_loader:
-    # print(f"Batch image shape: {images.shape}")
-    # print(f"Batch label shape: {labels.shape}")
+    print(f"Batch image shape: {images.shape}")
+    print(f"Batch label shape: {labels.shape}")
     break  # Remove this break to see all batches, or keep to see just the first batch
 
 
