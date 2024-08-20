@@ -560,22 +560,35 @@ class HandScanDataset2(Dataset):
 
         return best_slice
 
-    def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
-        """ Given a path to a DICOM image, process and return the image. 
-            Reduces the size in memory.
-        """
+def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
         dicom_file = pydicom.dcmread(path)
-        image = dicom_file.pixel_array
-        image = image - np.min(image)
-        image = image.astype(np.uint8)
+        image = dicom_file.pixel_array.astype(np.float32)
         
-        # Resize the image to 512x384 using PIL
+        # Normalize the image: Zero mean and unit variance
+        mean = np.mean(image)
+        std = np.std(image)
+        image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
+
+        # Apply 95% clipping
+        lower_bound = np.percentile(image, 2.5)
+        upper_bound = np.percentile(image, 97.5)
+        image = np.clip(image, lower_bound, upper_bound)
+
+        # Normalize again after clipping
+        mean = np.mean(image)
+        std = np.std(image)
+        image = (image - mean) / (std + 1e-7)
+
+        # Convert back to uint8 for further processing
+        image = (image * 255).astype(np.uint8)
+
         if resize:
             image = Image.fromarray(image)
-            image = image.resize((512, 384))
+            image = image.resize((512, 384))  # Resize the image to 512x384
             image = np.array(image)
-        
+
         return image
+
 
     def get_sequence_images(self, path: str) -> list:
         images = []
