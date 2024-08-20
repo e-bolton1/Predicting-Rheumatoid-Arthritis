@@ -590,7 +590,7 @@ def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
         return image
 
 
-    def get_sequence_images(self, path: str) -> list:
+def get_sequence_images(self, path: str) -> list:
         images = []
         
         # Get a list of all DICOM files in the directory
