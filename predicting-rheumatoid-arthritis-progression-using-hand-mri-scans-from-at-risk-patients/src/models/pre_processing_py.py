@@ -312,8 +312,6 @@ class HandScanDataset(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
-
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -470,6 +468,7 @@ class HandScanDataset2(Dataset):
         """
         seq_len = 2
         all_images = []
+        img_shape = (512, 384)  # Set a default image shape
 
         for root, dirs, files in os.walk(base_path):
             if 't1_vibe_we' in dirs:
@@ -495,7 +494,6 @@ class HandScanDataset2(Dataset):
                 if best_slice:
                     best_dicom_file, best_image_path = best_slice
                     best_instance_number = best_dicom_file.InstanceNumber
-                    
 
                     # Calculate the start and end indices for the selected sequence
                     start_index = max(0, best_instance_number - (seq_len // 2))
@@ -514,7 +512,7 @@ class HandScanDataset2(Dataset):
 
                     # Determine the original image dimensions
                     if images:
-                        img_shape = images[0].shape
+                        img_shape = images[0].shape  # Set img_shape based on the first image
 
                     if len(images) < seq_len:
                         # Pad with zero images of the same shape as the original images
@@ -523,6 +521,7 @@ class HandScanDataset2(Dataset):
 
                     all_images.extend(images)
         return np.array(all_images)
+
 
     def remove_duplicates(self, dicom_files):
         """ Remove duplicate instance numbers, keeping only the slice with the highest sum of intensities. """
@@ -560,65 +559,65 @@ class HandScanDataset2(Dataset):
 
         return best_slice
 
-def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
-        dicom_file = pydicom.dcmread(path)
-        image = dicom_file.pixel_array.astype(np.float32)
-        
-        # Normalize the image: Zero mean and unit variance
-        mean = np.mean(image)
-        std = np.std(image)
-        image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
+    def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
+            dicom_file = pydicom.dcmread(path)
+            image = dicom_file.pixel_array.astype(np.float32)
+            
+            # Normalize the image: Zero mean and unit variance
+            mean = np.mean(image)
+            std = np.std(image)
+            image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
 
-        # Apply 95% clipping
-        lower_bound = np.percentile(image, 2.5)
-        upper_bound = np.percentile(image, 97.5)
-        image = np.clip(image, lower_bound, upper_bound)
+            # Apply 95% clipping
+            lower_bound = np.percentile(image, 2.5)
+            upper_bound = np.percentile(image, 97.5)
+            image = np.clip(image, lower_bound, upper_bound)
 
-        # Normalize again after clipping
-        mean = np.mean(image)
-        std = np.std(image)
-        image = (image - mean) / (std + 1e-7)
+            # Normalize again after clipping
+            mean = np.mean(image)
+            std = np.std(image)
+            image = (image - mean) / (std + 1e-7)
 
-        # Convert back to uint8 for further processing
-        image = (image * 255).astype(np.uint8)
+            # Convert back to uint8 for further processing
+            image = (image * 255).astype(np.uint8)
 
-        if resize:
-            image = Image.fromarray(image)
-            image = image.resize((512, 384))  # Resize the image to 512x384
-            image = np.array(image)
+            if resize:
+                image = Image.fromarray(image)
+                image = image.resize((512, 384))  # Resize the image to 512x384
+                image = np.array(image)
 
-        return image
+            return image
 
 
-def get_sequence_images(self, path: str) -> list:
-        images = []
-        
-        # Get a list of all DICOM files in the directory
-        image_path_list = glob.glob(os.path.join(path, '*'))
-        
-        # Read the DICOM files and store them with their instance numbers
-        dicom_files = []
-        for image_path in image_path_list:
-            try:
-                dicom_file = pydicom.dcmread(image_path)
-                instance_number = dicom_file.InstanceNumber
-                dicom_files.append((instance_number, image_path))
-            except Exception as e:
-                print(f"Error reading {image_path}: {e}")
-        
-        # Sort the files by instance number
-        dicom_files.sort(key=lambda x: x[0])
-        
-        # Read the pixel data in sorted order
-        for _, image_path in dicom_files:
-            try:
-                dicom_file = pydicom.dcmread(image_path)
-                image = dicom_file.pixel_array
-                images.append(image)
-            except Exception as e:
-                print(f"Error reading pixel data from {image_path}: {e}")
-        
-        return images
+    def get_sequence_images(self, path: str) -> list:
+            images = []
+            
+            # Get a list of all DICOM files in the directory
+            image_path_list = glob.glob(os.path.join(path, '*'))
+            
+            # Read the DICOM files and store them with their instance numbers
+            dicom_files = []
+            for image_path in image_path_list:
+                try:
+                    dicom_file = pydicom.dcmread(image_path)
+                    instance_number = dicom_file.InstanceNumber
+                    dicom_files.append((instance_number, image_path))
+                except Exception as e:
+                    print(f"Error reading {image_path}: {e}")
+            
+            # Sort the files by instance number
+            dicom_files.sort(key=lambda x: x[0])
+            
+            # Read the pixel data in sorted order
+            for _, image_path in dicom_files:
+                try:
+                    dicom_file = pydicom.dcmread(image_path)
+                    image = dicom_file.pixel_array
+                    images.append(image)
+                except Exception as e:
+                    print(f"Error reading pixel data from {image_path}: {e}")
+            
+            return images
 
 
 # #### Dataloader
@@ -631,8 +630,8 @@ train_dataset = HandScanDataset2(labels_df=train_df, data_dir=training_data_dir,
 valid_dataset = HandScanDataset2(labels_df=valid_df, data_dir=training_data_dir, transform=validation_transform)
 
 # Creating data loaders
-batch_size = 4
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+batch_size = 1
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
 
