@@ -37,8 +37,6 @@ from collections import defaultdict
 # In[3]:
 
 
-os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBSET/')
-print(os.getcwd())
 
 
 # #### Process the DICOM Image
@@ -385,7 +383,7 @@ class MorphologicalOperations(tio.Transform):
 
 transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((20, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
+    #tio.CropOrPad((1, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomElasticDeformation(
@@ -394,7 +392,7 @@ transform = tio.Compose([
         locked_borders=True
     ),
     tio.RandomFlip(axes=(2,)),        # Randomly flip along the vertical axis only
-    #tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
+    tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
     tio.RandomBlur(std=(0.5, 1.0))    # Apply subtle blur
 ])
 
@@ -405,7 +403,7 @@ transform = tio.Compose([
 
 validation_transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((20, 512, 512))   # Crop or pad images to the desired shape
+    #tio.CropOrPad((1, 512, 512))   # Crop or pad images to the desired shape
 ])
 
 
@@ -450,15 +448,6 @@ class HandScanDataset2(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-            # Display the raw images before any transformation
-        print(f"Displaying raw images for patient: {patient_id}")
-        for i, img in enumerate(images):
-            plt.figure(figsize=(6, 6))
-            plt.imshow(img, cmap='gray')
-            plt.title(f"Raw Image {i+1}")
-            plt.axis('off')
-            plt.show()
-
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -470,21 +459,13 @@ class HandScanDataset2(Dataset):
         # Convert tensor back to numpy for visualization (if needed)
         transformed_images = images_tensor_channel.squeeze(0).numpy()
         
-        print(f"Displaying transformed images for patient: {patient_id}")
-        for i, img in enumerate(transformed_images):
-            plt.figure(figsize=(6, 6))
-            plt.imshow(img, cmap='gray')
-            plt.title(f"Transformed Image {i+1}")
-            plt.axis('off')
-            plt.show()
-        return images_tensor_channel, label_tensor
 
     def get_best_patient_images(self, base_path):
         """ 
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 2
+        seq_len = 6
         all_images = []
         img_shape = (512, 384)  # Set a default image shape
 
@@ -601,7 +582,7 @@ class HandScanDataset2(Dataset):
 
             if resize:
                 image = Image.fromarray(image)
-                image = image.resize((512, 384))  # Resize the image to 512x384
+                image = image.resize((384, 512))  # Resize the image to 512x384
                 image = np.array(image)
 
             return image
