@@ -37,8 +37,6 @@ from collections import defaultdict
 # In[3]:
 
 
-os.chdir('/Users/eleanorbolton/OneDrive - University of Leeds/CCP_MRI_IMAGE_SUBSET/')
-print(os.getcwd())
 
 
 # #### Process the DICOM Image
@@ -312,8 +310,6 @@ class HandScanDataset(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        print(f"Patient ID: {patient_id}, Image shape: {images.shape}")
-
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -387,7 +383,7 @@ class MorphologicalOperations(tio.Transform):
 
 transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((20, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
+    #tio.CropOrPad((1, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
     tio.RandomElasticDeformation(
@@ -407,7 +403,7 @@ transform = tio.Compose([
 
 validation_transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
-    tio.CropOrPad((20, 512, 512))   # Crop or pad images to the desired shape
+    #tio.CropOrPad((1, 512, 512))   # Crop or pad images to the desired shape
 ])
 
 
@@ -452,7 +448,6 @@ class HandScanDataset2(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -461,15 +456,18 @@ class HandScanDataset2(Dataset):
         if self.transform:
             images_tensor_channel = self.transform(images_tensor_channel)
 
-        return images_tensor_channel, label_tensor
+        # Convert tensor back to numpy for visualization (if needed)
+        transformed_images = images_tensor_channel.squeeze(0).numpy()
+        
 
     def get_best_patient_images(self, base_path):
         """ 
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 2
+        seq_len = 6
         all_images = []
+        img_shape = (512, 384)  # Set a default image shape
 
         for root, dirs, files in os.walk(base_path):
             if 't1_vibe_we' in dirs:
@@ -495,7 +493,6 @@ class HandScanDataset2(Dataset):
                 if best_slice:
                     best_dicom_file, best_image_path = best_slice
                     best_instance_number = best_dicom_file.InstanceNumber
-                    
 
                     # Calculate the start and end indices for the selected sequence
                     start_index = max(0, best_instance_number - (seq_len // 2))
@@ -514,7 +511,7 @@ class HandScanDataset2(Dataset):
 
                     # Determine the original image dimensions
                     if images:
-                        img_shape = images[0].shape
+                        img_shape = images[0].shape  # Set img_shape based on the first image
 
                     if len(images) < seq_len:
                         # Pad with zero images of the same shape as the original images
@@ -523,6 +520,7 @@ class HandScanDataset2(Dataset):
 
                     all_images.extend(images)
         return np.array(all_images)
+
 
     def remove_duplicates(self, dicom_files):
         """ Remove duplicate instance numbers, keeping only the slice with the highest sum of intensities. """
@@ -561,51 +559,64 @@ class HandScanDataset2(Dataset):
         return best_slice
 
     def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
-        """ Given a path to a DICOM image, process and return the image. 
-            Reduces the size in memory.
-        """
-        dicom_file = pydicom.dcmread(path)
-        image = dicom_file.pixel_array
-        image = image - np.min(image)
-        image = image.astype(np.uint8)
-        
-        # Resize the image to 512x384 using PIL
-        if resize:
-            image = Image.fromarray(image)
-            image = image.resize((512, 384))
-            image = np.array(image)
-        
-        return image
+            dicom_file = pydicom.dcmread(path)
+            image = dicom_file.pixel_array.astype(np.float32)
+            
+            # Normalize the image: Zero mean and unit variance
+            #mean = np.mean(image)
+            #std = np.std(image)
+            #image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
+
+            # Apply 95% clipping
+            #lower_bound = np.percentile(image, 2.5)
+            #upper_bound = np.percentile(image, 97.5)
+            #image = np.clip(image, lower_bound, upper_bound)
+
+            # Normalize again after clipping
+            #mean = np.mean(image)
+            #std = np.std(image)
+            #image = (image - mean) / (std + 1e-7)
+
+            # Convert back to uint8 for further processing
+            image = (image * 255).astype(np.uint8)
+
+            if resize:
+                image = Image.fromarray(image)
+                image = image.resize((384, 512))  # Resize the image to 512x384
+                image = np.array(image)
+
+            return image
+
 
     def get_sequence_images(self, path: str) -> list:
-        images = []
-        
-        # Get a list of all DICOM files in the directory
-        image_path_list = glob.glob(os.path.join(path, '*'))
-        
-        # Read the DICOM files and store them with their instance numbers
-        dicom_files = []
-        for image_path in image_path_list:
-            try:
-                dicom_file = pydicom.dcmread(image_path)
-                instance_number = dicom_file.InstanceNumber
-                dicom_files.append((instance_number, image_path))
-            except Exception as e:
-                print(f"Error reading {image_path}: {e}")
-        
-        # Sort the files by instance number
-        dicom_files.sort(key=lambda x: x[0])
-        
-        # Read the pixel data in sorted order
-        for _, image_path in dicom_files:
-            try:
-                dicom_file = pydicom.dcmread(image_path)
-                image = dicom_file.pixel_array
-                images.append(image)
-            except Exception as e:
-                print(f"Error reading pixel data from {image_path}: {e}")
-        
-        return images
+            images = []
+            
+            # Get a list of all DICOM files in the directory
+            image_path_list = glob.glob(os.path.join(path, '*'))
+            
+            # Read the DICOM files and store them with their instance numbers
+            dicom_files = []
+            for image_path in image_path_list:
+                try:
+                    dicom_file = pydicom.dcmread(image_path)
+                    instance_number = dicom_file.InstanceNumber
+                    dicom_files.append((instance_number, image_path))
+                except Exception as e:
+                    print(f"Error reading {image_path}: {e}")
+            
+            # Sort the files by instance number
+            dicom_files.sort(key=lambda x: x[0])
+            
+            # Read the pixel data in sorted order
+            for _, image_path in dicom_files:
+                try:
+                    dicom_file = pydicom.dcmread(image_path)
+                    image = dicom_file.pixel_array
+                    images.append(image)
+                except Exception as e:
+                    print(f"Error reading pixel data from {image_path}: {e}")
+            
+            return images
 
 
 # #### Dataloader
@@ -618,8 +629,8 @@ train_dataset = HandScanDataset2(labels_df=train_df, data_dir=training_data_dir,
 valid_dataset = HandScanDataset2(labels_df=valid_df, data_dir=training_data_dir, transform=validation_transform)
 
 # Creating data loaders
-batch_size = 4
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+batch_size = 1
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
 
