@@ -394,7 +394,7 @@ transform = tio.Compose([
         locked_borders=True
     ),
     tio.RandomFlip(axes=(2,)),        # Randomly flip along the vertical axis only
-    tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
+    #tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
     tio.RandomBlur(std=(0.5, 1.0))    # Apply subtle blur
 ])
 
@@ -450,7 +450,15 @@ class HandScanDataset2(Dataset):
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
 
-        
+            # Display the raw images before any transformation
+        print(f"Displaying raw images for patient: {patient_id}")
+        for i, img in enumerate(images):
+            plt.figure(figsize=(6, 6))
+            plt.imshow(img, cmap='gray')
+            plt.title(f"Raw Image {i+1}")
+            plt.axis('off')
+            plt.show()
+
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -564,19 +572,19 @@ class HandScanDataset2(Dataset):
             image = dicom_file.pixel_array.astype(np.float32)
             
             # Normalize the image: Zero mean and unit variance
-            mean = np.mean(image)
-            std = np.std(image)
-            image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
+            #mean = np.mean(image)
+            #std = np.std(image)
+            #image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
 
             # Apply 95% clipping
-            lower_bound = np.percentile(image, 2.5)
-            upper_bound = np.percentile(image, 97.5)
-            image = np.clip(image, lower_bound, upper_bound)
+            #lower_bound = np.percentile(image, 2.5)
+            #upper_bound = np.percentile(image, 97.5)
+            #image = np.clip(image, lower_bound, upper_bound)
 
             # Normalize again after clipping
-            mean = np.mean(image)
-            std = np.std(image)
-            image = (image - mean) / (std + 1e-7)
+            #mean = np.mean(image)
+            #std = np.std(image)
+            #image = (image - mean) / (std + 1e-7)
 
             # Convert back to uint8 for further processing
             image = (image * 255).astype(np.uint8)
