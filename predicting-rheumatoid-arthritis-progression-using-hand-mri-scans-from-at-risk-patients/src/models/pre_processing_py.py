@@ -467,6 +467,16 @@ class HandScanDataset2(Dataset):
         if self.transform:
             images_tensor_channel = self.transform(images_tensor_channel)
 
+        # Convert tensor back to numpy for visualization (if needed)
+        transformed_images = images_tensor_channel.squeeze(0).numpy()
+        
+        print(f"Displaying transformed images for patient: {patient_id}")
+        for i, img in enumerate(transformed_images):
+            plt.figure(figsize=(6, 6))
+            plt.imshow(img, cmap='gray')
+            plt.title(f"Transformed Image {i+1}")
+            plt.axis('off')
+            plt.show()
         return images_tensor_channel, label_tensor
 
     def get_best_patient_images(self, base_path):
