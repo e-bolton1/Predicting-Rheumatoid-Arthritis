@@ -339,17 +339,20 @@ class CustomThresholding(tio.Transform):
 
     def apply_transform(self, subject):
         for key, image in subject.get_images_dict(intensity_only=True).items():
+            # Use a more dynamic thresholding approach
             max_intensity = torch.max(image.data)
-            threshold_value = self.threshold_percentage * max_intensity
+            mean_intensity = torch.mean(image.data)
+            threshold_value = self.threshold_percentage * max_intensity + (1 - self.threshold_percentage) * mean_intensity
             binary_mask = (image.data > threshold_value).float()
+
+            # Debugging: Visualize the mask
+            plt.imshow(binary_mask[0, binary_mask.shape[1] // 2].cpu(), cmap="gray")
+            plt.title(f"{key} Mask after Thresholding")
+            plt.axis("off")
+            plt.show()
+
             subject.add_image(tio.LabelMap(tensor=binary_mask), f'{key}_mask')
         return subject
-
-
-# #### Morphological Operations
-# improves the mask of the hand to identfiy the ROI
-
-# In[6]:
 
 
 class MorphologicalOperations(tio.Transform):
@@ -361,21 +364,41 @@ class MorphologicalOperations(tio.Transform):
     def apply_transform(self, subject):
         for key, image in subject.get_images_dict(intensity_only=False).items():
             if 'mask' in key:
-                # Add batch and channel dimensions
-                mask_tensor = image.data.unsqueeze(0).unsqueeze(0)
-                
+                mask_tensor = image.data
+
+                # Ensure the mask tensor is 5D (batch_size, channels, depth, height, width)
+                if mask_tensor.dim() == 4:  # (depth, height, width)
+                    mask_tensor = mask_tensor.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+                elif mask_tensor.dim() == 5:  # (batch_size, depth, height, width)
+                    mask_tensor = mask_tensor.unsqueeze(1)  # Add channel dimension
+
                 # Morphological opening (erosion followed by dilation)
-                eroded = F.conv3d(mask_tensor, self.kernel, padding=1) > (self.kernel_size ** 3 - 1)
+                eroded = F.conv3d(mask_tensor.float(), self.kernel, padding=1) > (self.kernel_size ** 3 - 1)
                 dilated = F.conv3d(eroded.float(), self.kernel, padding=1) > 0
-                
+
+                # Debugging: Visualize the mask after opening
+                plt.imshow(dilated[0, dilated.shape[2] // 2].cpu(), cmap="gray")
+                plt.title(f"{key} Mask after Opening")
+                plt.axis("off")
+                plt.show()
+
                 # Morphological closing (dilation followed by erosion)
                 dilated_closed = F.conv3d(dilated.float(), self.kernel, padding=1) > 0
                 eroded_closed = F.conv3d(dilated_closed.float(), self.kernel, padding=1) > (self.kernel_size ** 3 - 1)
-                
-                # Remove batch and channel dimensions
-                final_mask = eroded_closed.squeeze(0).squeeze(0)
+
+                # Squeeze the tensor back to its original shape
+                final_mask = eroded_closed.squeeze(0).squeeze(0)  # Remove batch and channel dimensions
+
+                # Debugging: Visualize the final mask
+                plt.imshow(final_mask[final_mask.shape[1] // 2].cpu(), cmap="gray")
+                plt.title(f"{key} Mask after Morphological Operations")
+                plt.axis("off")
+                plt.show()
+
                 subject.add_image(tio.LabelMap(tensor=final_mask), f'{key}_processed')
         return subject
+
+
 
 
 # In[12]:
@@ -386,14 +409,14 @@ transform = tio.Compose([
     #tio.CropOrPad((1, 512, 512)),     # Crop or pad to 2 slices and 384x512 pixels
     CustomThresholding(threshold_percentage=0.1),  # Apply custom thresholding
     MorphologicalOperations(kernel_size=3),        # Apply morphological operations
-    tio.RandomElasticDeformation(
-        num_control_points=8,
-        max_displacement=(1, 1, 1),
-        locked_borders=True
-    ),
-    tio.RandomFlip(axes=(2,)),        # Randomly flip along the vertical axis only
-    tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
-    tio.RandomBlur(std=(0.5, 1.0))    # Apply subtle blur
+    #tio.RandomElasticDeformation(
+    #    num_control_points=10,
+    #    max_displacement=(0.5, 0.5, 0.5),
+    #    locked_borders=True
+    #),
+    #tio.RandomFlip(axes=(2,)),        # Randomly flip along the vertical axis only
+    #tio.RandomNoise(std=(0, 0.02)),   # Add subtle Gaussian noise 
+    #tio.RandomBlur(std=(0.5, 1.0))    # Apply subtle blur
 ])
 
 
@@ -443,11 +466,10 @@ class HandScanDataset2(Dataset):
         # Process the images for this patient
         patient_dir = os.path.join(self.data_dir, patient_id)
         images = self.get_best_patient_images(patient_dir)  # Call the internal method
-        
+
         # If no images were returned, handle this case (optional)
         if len(images) == 0:
             raise ValueError(f"No images found for patient {patient_id}")
-
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
@@ -456,8 +478,9 @@ class HandScanDataset2(Dataset):
         if self.transform:
             images_tensor_channel = self.transform(images_tensor_channel)
 
-        # Convert tensor back to numpy for visualization (if needed)
-        transformed_images = images_tensor_channel.squeeze(0).numpy()
+        # Return the transformed images and label
+        return images_tensor_channel, label_tensor
+
         
 
     def get_best_patient_images(self, base_path):
@@ -465,7 +488,7 @@ class HandScanDataset2(Dataset):
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 6
+        seq_len = 16
         all_images = []
         img_shape = (512, 384)  # Set a default image shape
 
@@ -489,36 +512,46 @@ class HandScanDataset2(Dataset):
                 dicom_files = self.remove_duplicates(dicom_files)
 
                 # Find the best slice
-                best_slice = self.find_best_slice(dicom_files)
-                if best_slice:
-                    best_dicom_file, best_image_path = best_slice
-                    best_instance_number = best_dicom_file.InstanceNumber
+                if dicom_files:
+                    # Find the slice with the highest intensity
+                    max_sum = -1
+                    best_dicom_file, best_image_path = None, None
+                    for dicom_file, image_path in dicom_files:
+                        image = dicom_file.pixel_array
+                        image_sum = np.sum(image)
+                        if image_sum > max_sum:
+                            max_sum = image_sum
+                            best_dicom_file, best_image_path = dicom_file, image_path
 
-                    # Calculate the start and end indices for the selected sequence
-                    start_index = max(0, best_instance_number - (seq_len // 2))
-                    end_index = start_index + seq_len
+                    if best_dicom_file is not None:
+                        best_instance_number = best_dicom_file.InstanceNumber
 
-                    # Select the slices around the best slice
-                    selected_slices = dicom_files[start_index:end_index]
+                        # Calculate the start and end indices for the selected sequence
+                        start_index = max(0, best_instance_number - (seq_len // 2))
+                        end_index = start_index + seq_len
 
-                    images = []
-                    for dicom_file, image_path in selected_slices:
-                        try:
-                            image = self.process_dicom_image(image_path)
-                            images.append(image)
-                        except Exception as e:
-                            print(f"Error processing image {image_path}: {e}")
+                        # Select the slices around the best slice
+                        selected_slices = dicom_files[start_index:end_index]
 
-                    # Determine the original image dimensions
-                    if images:
-                        img_shape = images[0].shape  # Set img_shape based on the first image
+                        images = []
+                        for dicom_file, image_path in selected_slices:
+                            try:
+                                image = self.process_dicom_image(image_path)
+                                images.append(image)
+                            except Exception as e:
+                                print(f"Error processing image {image_path}: {e}")
 
-                    if len(images) < seq_len:
-                        # Pad with zero images of the same shape as the original images
-                        diff = seq_len - len(images)
-                        images.extend([np.zeros(img_shape, dtype=np.uint8) for _ in range(diff)])
+                        # Determine the original image dimensions
+                        if images:
+                            img_shape = images[0].shape  # Set img_shape based on the first image
 
-                    all_images.extend(images)
+                        if len(images) < seq_len:
+                            # Pad with zero images of the same shape as the original images
+                            diff = seq_len - len(images)
+                            images.extend([np.zeros(img_shape, dtype=np.uint8) for _ in range(diff)])
+
+                        all_images.extend(images)
+
         return np.array(all_images)
 
 
@@ -530,52 +563,64 @@ class HandScanDataset2(Dataset):
             instance_number = dicom_file.InstanceNumber
             instance_dict[instance_number].append((dicom_file, image_path))
 
-        # Keep only the slice with the highest sum of intensities for each instance number
+        # Compare DICOM files with the same Instance Number
         unique_dicom_files = []
         for instance_number, files in instance_dict.items():
+
+
             if len(files) > 1:
+
+                # Optionally, still choose the best slice based on your criteria, but here we're just showing the differences
                 best_slice = self.find_best_slice(files)
                 unique_dicom_files.append(best_slice)
+
             else:
                 unique_dicom_files.append(files[0])
 
+
         return unique_dicom_files
 
+
     def find_best_slice(self, dicom_files):
-        """ Find the slice with the highest sum of pixel intensities. """
-        max_sum = -1
+        """ Find the slice with the 'DOTAREM' ContrastBolusAgent or, as a fallback, return the first available slice. """
         best_slice = None
 
+        # Check for the slice with 'DOTAREM'
         for dicom_file, image_path in dicom_files:
-            try:
-                image = dicom_file.pixel_array
-                image_sum = np.sum(image)
-                if image_sum > max_sum:
-                    max_sum = image_sum
-                    best_slice = (dicom_file, image_path)
-            except Exception as e:
-                print(f"Error reading {image_path}: {e}")
+            if hasattr(dicom_file, 'ContrastBolusAgent') and dicom_file.ContrastBolusAgent == 'DOTAREM':
+                best_slice = (dicom_file, image_path)
+                break  # Stop searching once we find the 'DOTAREM' slice
+
+        # Fallback: If no slice with 'DOTAREM' is found, return the first slice
+        if best_slice is None:
+            best_slice = dicom_files[0]
 
         return best_slice
+
 
     def process_dicom_image(self, path: str, resize=True) -> np.ndarray:
             dicom_file = pydicom.dcmread(path)
             image = dicom_file.pixel_array.astype(np.float32)
             
+            # If the image has any zero-sized dimensions, return a placeholder or skip processing
+            if 0 in image.shape:
+                print(f"Skipping image due to invalid shape: {image.shape}")
+                return np.zeros((512, 384), dtype=np.uint8) 
+            
             # Normalize the image: Zero mean and unit variance
-            #mean = np.mean(image)
-            #std = np.std(image)
-            #image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
+            mean = np.mean(image)
+            std = np.std(image)
+            image = (image - mean) / (std + 1e-7)  # Add a small epsilon to prevent division by zero
 
             # Apply 95% clipping
-            #lower_bound = np.percentile(image, 2.5)
-            #upper_bound = np.percentile(image, 97.5)
-            #image = np.clip(image, lower_bound, upper_bound)
+            lower_bound = np.percentile(image, 2.5)
+            upper_bound = np.percentile(image, 97.5)
+            image = np.clip(image, lower_bound, upper_bound)
 
             # Normalize again after clipping
-            #mean = np.mean(image)
-            #std = np.std(image)
-            #image = (image - mean) / (std + 1e-7)
+            mean = np.mean(image)
+            std = np.std(image)
+            image = (image - mean) / (std + 1e-7)
 
             # Convert back to uint8 for further processing
             image = (image * 255).astype(np.uint8)
@@ -637,12 +682,6 @@ valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 # In[16]:
 
 
-# Check a few samples directly from the dataset
-for i in range(len(train_dataset)):
-    images, labels = train_dataset[i]
-    print(f"Sample {i}: Image shape: {images.shape}, Label: {labels}")
-    if i == 2:  # Check only the first 3 samples
-        break
 
 
 # In[17]:
