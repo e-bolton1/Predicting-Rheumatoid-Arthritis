@@ -32,7 +32,7 @@ from pydicom.fileset import FileSet  # For working with DICOM FileSets
 from sklearn.model_selection import train_test_split  # For splitting datasets into training and testing sets
 
 from collections import defaultdict
-
+from monai.transforms import apply_transform
 
 # In[3]:
 
@@ -473,13 +473,21 @@ class HandScanDataset2(Dataset):
 
         images_tensor = torch.tensor(images, dtype=torch.float32)
         images_tensor_channel = torch.unsqueeze(images_tensor, 0)
+        # Prepare the data dictionary
+        data = {"im": images_tensor_channel}
+
+        # Apply the transform if available
+        if self.transform:
+            data = apply_transform(self.transform, data)  # Ensure this transform keeps the 'im' key
+        
+        # Confirm that the 'im' key exists after transformation
+        if "im" not in data:
+            raise KeyError("'im' key not found in the transformed data")
+        
         label_tensor = torch.tensor(label, dtype=torch.long)
 
-        if self.transform:
-            images_tensor_channel = self.transform(images_tensor_channel)
-
-        # Return the transformed images and label
-        return images_tensor_channel, label_tensor
+        # Return the dictionary with both images and label
+        return data
 
         
 
@@ -488,9 +496,9 @@ class HandScanDataset2(Dataset):
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 16
+        seq_len = 32
         all_images = []
-        img_shape = (512, 384)  # Set a default image shape
+        img_shape = (512, 352)  # Set a default image shape
 
         for root, dirs, files in os.walk(base_path):
             if 't1_vibe_we' in dirs:
@@ -680,18 +688,51 @@ valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
 
 
 # In[16]:
+import os
+import glob
+import json
+
+def collect_image_paths(labels_df, data_dir):
+    dataset_dict = {"training": [], "validation": []}
+
+    for _, row in labels_df.iterrows():
+        patient_id = str(row['patient ID']).zfill(5)
+        label = 1 if row['progression'] == 'y' else 0
+
+        patient_dir = os.path.join(data_dir, patient_id)
+        t1_vibe_we_path = os.path.join(patient_dir, 't1_vibe_we')
+        
+        # Collect all image paths in the 't1_vibe_we' directory
+        image_paths = glob.glob(os.path.join(t1_vibe_we_path, '*'))
+        
+        if len(image_paths) == 0:
+            print(f"No images found for patient {patient_id}")
+            continue
+
+        # Collect the paths in a format expected by MONAI
+        for img_path in image_paths:
+            # Example entry for training set
+            entry = {
+                "image": img_path,
+                "label": label
+            }
+            dataset_dict["training"].append(entry)
+
+    return dataset_dict
+
+def save_dataset_to_json(dataset_dict, output_json_path):
+    with open(output_json_path, 'w') as f:
+        json.dump(dataset_dict, f, indent=4)
+
+# Example usage
+dataset_dict = collect_image_paths(labels_df, training_data_dir)
+output_json_path = '/Users/eleanorbolton/Library/CloudStorage/OneDrive-UniversityofLeeds/Masters - 23-24/Project/results/training_data.json'
+save_dataset_to_json(dataset_dict, output_json_path)
 
 
 
 
 # In[17]:
-
-
-# Iterate through the train_loader and print the shape of the batches
-for images, labels in train_loader:
-    print(f"Batch image shape: {images.shape}")
-    print(f"Batch label shape: {labels.shape}")
-    break  # Remove this break to see all batches, or keep to see just the first batch
 
 
 # In[ ]:
