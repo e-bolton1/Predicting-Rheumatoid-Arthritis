@@ -484,11 +484,10 @@ class HandScanDataset2(Dataset):
         if "im" not in data:
             raise KeyError("'im' key not found in the transformed data")
         
-        images_tensor_channel = data["im"]
         label_tensor = torch.tensor(label, dtype=torch.long)
 
         # Return the dictionary with both images and label
-        return {"im": images_tensor_channel, "label": label_tensor}
+        return data
 
         
 
@@ -497,9 +496,9 @@ class HandScanDataset2(Dataset):
         Process all images in the 't1_vibe_we' subfolder of each subject.
         Sort images by Instance Number and return a sequence of a fixed length.
         """
-        seq_len = 2
+        seq_len = 32
         all_images = []
-        img_shape = (512, 384)  # Set a default image shape
+        img_shape = (512, 352)  # Set a default image shape
 
         for root, dirs, files in os.walk(base_path):
             if 't1_vibe_we' in dirs:
