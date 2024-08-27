@@ -324,7 +324,7 @@ class HandScanDataset(Dataset):
 
 # ### Setting up transformation using torch.io
 
-# #### Custom thresholding 
+'''# #### Custom thresholding 
 # Separates the the foregrounds (objects of interest – hand) from the background 
 # Pixels with intensity values above this threshold are considered part of the foreground, while those below are treated as background.
 # 
@@ -427,7 +427,7 @@ transform = tio.Compose([
 validation_transform = tio.Compose([
     tio.ToCanonical(),                # Reorient images to a standard orientation
     #tio.CropOrPad((1, 512, 512))   # Crop or pad images to the desired shape
-])
+])'''
 
 
 # In[14]:
@@ -498,7 +498,7 @@ class HandScanDataset2(Dataset):
         """
         seq_len = 32
         all_images = []
-        img_shape = (512, 352)  # Set a default image shape
+        img_shape = (512, 282)  # Set a default image shape
 
         for root, dirs, files in os.walk(base_path):
             if 't1_vibe_we' in dirs:
@@ -534,11 +534,14 @@ class HandScanDataset2(Dataset):
                     if best_dicom_file is not None:
                         best_instance_number = best_dicom_file.InstanceNumber
 
-                        # Calculate the start and end indices for the selected sequence
-                        start_index = max(0, best_instance_number - (seq_len // 2))
-                        end_index = start_index + seq_len
+                        # Calculate the central slice index
+                        central_index = best_instance_number - 1  # InstanceNumber is 1-based
 
-                        # Select the slices around the best slice
+                        # Determine the range of slices to extract the central 5 slices
+                        start_index = max(0, central_index - 2)
+                        end_index = min(len(dicom_files), central_index + 3)
+
+                        # Extract the central 5 slices
                         selected_slices = dicom_files[start_index:end_index]
 
                         images = []
@@ -553,6 +556,7 @@ class HandScanDataset2(Dataset):
                         if images:
                             img_shape = images[0].shape  # Set img_shape based on the first image
 
+                        # Pad to the required sequence length if needed
                         if len(images) < seq_len:
                             # Pad with zero images of the same shape as the original images
                             diff = seq_len - len(images)
@@ -561,6 +565,8 @@ class HandScanDataset2(Dataset):
                         all_images.extend(images)
 
         return np.array(all_images)
+
+
 
 
     def remove_duplicates(self, dicom_files):
@@ -630,9 +636,6 @@ class HandScanDataset2(Dataset):
             std = np.std(image)
             image = (image - mean) / (std + 1e-7)
 
-            # Convert back to uint8 for further processing
-            image = (image * 255).astype(np.uint8)
-
             if resize:
                 image = Image.fromarray(image)
                 image = image.resize((384, 512))  # Resize the image to 512x384
@@ -677,67 +680,132 @@ class HandScanDataset2(Dataset):
 # In[15]:
 
 
-# Creating datasets
-train_dataset = HandScanDataset2(labels_df=train_df, data_dir=training_data_dir, transform=transform)
-valid_dataset = HandScanDataset2(labels_df=valid_df, data_dir=training_data_dir, transform=validation_transform)
 
-# Creating data loaders
-batch_size = 1
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False)
-
-
-# In[16]:
 import os
 import glob
-import json
+import pydicom
+import numpy as np
+import torch
+from torch.utils.data import Dataset
+from collections import defaultdict
 
-def collect_image_paths(labels_df, data_dir):
-    dataset_dict = {"training": [], "validation": []}
+class HandScanDataset3(Dataset):
+    def __init__(self, labels_df, data_dir, transform=None):
+        self.labels_df = labels_df
+        self.data_dir = data_dir
+        self.transform = transform
+        self.patient_ids = self.labels_df['patient ID'].astype(str).str.zfill(5).tolist()
+        self.labels = self.labels_df['progression'].apply(lambda x: 1 if x == 'y' else 0).tolist()
+        self.dict_labels = dict(zip(self.patient_ids, self.labels))
 
-    for _, row in labels_df.iterrows():
-        patient_id = str(row['patient ID']).zfill(5)
-        label = 1 if row['progression'] == 'y' else 0
+    def __len__(self):
+        return len(self.patient_ids)
 
-        patient_dir = os.path.join(data_dir, patient_id)
-        t1_vibe_we_path = os.path.join(patient_dir, 't1_vibe_we')
-        
-        # Collect all image paths in the 't1_vibe_we' directory
-        image_paths = glob.glob(os.path.join(t1_vibe_we_path, '*'))
-        
-        if len(image_paths) == 0:
-            print(f"No images found for patient {patient_id}")
-            continue
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
 
-        # Collect the paths in a format expected by MONAI
-        for img_path in image_paths:
-            # Example entry for training set
-            entry = {
-                "image": img_path,
-                "label": label
-            }
-            dataset_dict["training"].append(entry)
+        patient_id = self.patient_ids[idx]
+        label = self.labels[idx]
+        patient_dir = os.path.join(self.data_dir, patient_id)
+        images = self.get_patient_images(patient_dir)
 
-    return dataset_dict
+        if len(images) == 0:
+            raise ValueError(f"No images found for patient {patient_id}")
 
-def save_dataset_to_json(dataset_dict, output_json_path):
-    with open(output_json_path, 'w') as f:
-        json.dump(dataset_dict, f, indent=4)
+        images_tensor = torch.tensor(images, dtype=torch.float32)
 
-# Example usage
-dataset_dict = collect_image_paths(labels_df, training_data_dir)
-output_json_path = '/Users/eleanorbolton/Library/CloudStorage/OneDrive-UniversityofLeeds/Masters - 23-24/Project/results/training_data.json'
-save_dataset_to_json(dataset_dict, output_json_path)
+        # Apply random cropping
+        cropped_volume = self.random_crop(images_tensor, crop_size=(96, 96, 96))
 
+        data = {"im": cropped_volume}
 
+        if self.transform:
+            data = apply_transform(self.transform, data)
 
+        if "im" not in data:
+            raise KeyError("'im' key not found in the transformed data")
 
-# In[17]:
+        label_tensor = torch.tensor(label, dtype=torch.long)
 
+        return data
 
-# In[ ]:
+    def random_crop(self, volume, crop_size):
+        depth, height, width = volume.shape
+        crop_d, crop_h, crop_w = crop_size
 
+        if depth < crop_d or height < crop_h or width < crop_w:
+            raise ValueError("Crop size must be smaller than the dimensions of the volume.")
 
+        z = np.random.randint(0, depth - crop_d + 1)
+        y = np.random.randint(0, height - crop_h + 1)
+        x = np.random.randint(0, width - crop_w + 1)
 
+        return volume[z:z + crop_d, y:y + crop_h, x:x + crop_w]
 
+    def get_patient_images(self, base_path):
+        images = []
+        img_shape = (512, 512)  # Set a default image shape
+        for root, dirs, files in os.walk(base_path):
+            if 't1_vibe_we' in dirs:
+                t1_vibe_we_path = os.path.join(root, 't1_vibe_we')
+                dicom_files = []
+                for image_path in glob.glob(os.path.join(t1_vibe_we_path, '*')):
+                    try:
+                        dicom_file = pydicom.dcmread(image_path)
+                        dicom_files.append((dicom_file, image_path))
+                    except Exception as e:
+                        print(f"Error reading {image_path}: {e}")
 
+                dicom_files.sort(key=lambda x: x[0].InstanceNumber)
+                dicom_files = self.remove_duplicates(dicom_files)
+
+                for dicom_file, image_path in dicom_files:
+                    try:
+                        image = self.process_dicom_image(dicom_file)
+                        if image.shape == img_shape:  # Ensure all images have the same shape
+                            images.append(image)
+                    except Exception as e:
+                        print(f"Error processing image {image_path}: {e}")
+
+        return np.array(images)
+
+    def remove_duplicates(self, dicom_files):
+        instance_dict = defaultdict(list)
+        for dicom_file, image_path in dicom_files:
+            instance_number = dicom_file.InstanceNumber
+            instance_dict[instance_number].append((dicom_file, image_path))
+
+        unique_dicom_files = []
+        for instance_number, files in instance_dict.items():
+            if len(files) > 1:
+                best_slice = self.find_best_slice(files)
+                unique_dicom_files.append(best_slice)
+            else:
+                unique_dicom_files.append(files[0])
+
+        return unique_dicom_files
+
+    def find_best_slice(self, dicom_files):
+        max_sum = -1
+        best_slice = None
+        for dicom_file, image_path in dicom_files:
+            image = dicom_file.pixel_array
+            image_sum = np.sum(image)
+            if image_sum > max_sum:
+                max_sum = image_sum
+                best_slice = (dicom_file, image_path)
+        return best_slice
+
+    def process_dicom_image(self, dicom_file) -> np.ndarray:
+        image = dicom_file.pixel_array.astype(np.float32)
+        mean = np.mean(image)
+        std = np.std(image)
+        image = (image - mean) / (std + 1e-7)
+        lower_bound = np.percentile(image, 2.5)
+        upper_bound = np.percentile(image, 97.5)
+        image = np.clip(image, lower_bound, upper_bound)
+        mean = np.mean(image)
+        std = np.std(image)
+        image = (image - mean) / (std + 1e-7)
+        return (image * 255).astype(np.uint8)
