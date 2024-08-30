@@ -1,29 +1,4 @@
-predicting-rheumatoid-arthritis-progression-using-hand-mri-scans-from-at-risk-patients
+Developing a Self-Supervised Disruptive Autoencoder for Feature Extraction in Hand MRI Scans of At-Risk Patients for Predicting Rheumatoid Arthritis Progression
 ==============================
 
-Developing a predictive model for rheumatoid arthritis progression using MRI scans of hands from at-risk patients. This project utilises autoencoders for feature extraction and dimensionality reduction, followed by classification techniques.
-
-Project Organization
---------------------
-
-    .
-    ├── AUTHORS.md
-    ├── LICENSE
-    ├── README.md
-    ├── bin
-    ├── config
-    ├── data
-    │   ├── external
-    │   ├── interim
-    │   ├── processed
-    │   └── raw
-    ├── docs
-    ├── notebooks
-    ├── reports
-    │   └── figures
-    └── src
-        ├── data
-        ├── external
-        ├── models
-        ├── tools
-        └── visualization
+Rheumatoid Arthritis (RA) is a chronic autoimmune disorder where early diagnosis is critical for effective management. Current Magnetic Resonance Imaging(MRI)-based detection methods often fail to detect subtle, early-stage changes, limiting their diagnostic utility. This work presents a deep learning model that utilises Disruptive Autoencoders (DAEs) built on the SwinUNETR architecture. The objective of this model is to enhance the early detection of Rheumatoid Arthritis (RA) through Magnetic resonance imaging (MRI) scan analysis. The model demonstrated strong performance, achieving an average structural similarity index measure (SSIM) of 0.88 and a peak signal-to-noise ratio (PSNR) of 23.25 dB while maintaining a low Mean Squared Error (MSE) of 0.019. Visual examination showed the model to retain edges of anatomical features, however it faced difficulties in maintaining pixel-level fidelity, which could affect the identification of minor erosions. We achieved superior performance compared to existing Masked Autoencoder (MAE)-based methods, with a Mean Squared Error (MSE) loss of 0.019 compared to 0.164 in comparable datasets. Future work should focus on developing a classifier using features extracted from the DAE to predict RA risk, to enhance early detection and facilitate timely interventions.
