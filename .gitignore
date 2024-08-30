@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 venv/bin/convert-caffe2-to-onnx
 venv/bin/convert-onnx-to-caffe2
 venv/bin/f2py
@@ -29985,3 +29986,7 @@ venv/lib/python3.12/site-packages/tensorflow-2.17.0.dist-info/RECORD
 venv/lib/python3.12/site-packages/tensorflow-2.17.0.dist-info/REQUESTED
 venv/lib/python3.12/site-packages/tensorflow-2.17.0.dist-info/top_level.txt
 venv/lib/python3.12/site-packages/tensorflow-2.17.0.dist-info/WHEEL
+=======
+venv/
+predicting-rheumatoid-arthritis-progression-using-hand-mri-scans-from-at-risk-patients/src/models/ssl_pretrained_weights.pth
+>>>>>>> a10aaa1cb1958923cad56736717b56bd1cae1a26
